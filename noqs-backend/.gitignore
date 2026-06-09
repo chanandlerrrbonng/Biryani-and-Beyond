@@ -1,0 +1,7 @@
+node_modules/
+.env
+data/noqs.db
+data/noqs.db-shm
+data/noqs.db-wal
+*.log
+.DS_Store

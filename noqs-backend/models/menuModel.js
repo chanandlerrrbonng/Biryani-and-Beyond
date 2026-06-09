@@ -1,37 +1,40 @@
-const fs = require('fs');
-const path = require('path');
+const pool = require('../db');
 
-const MENU_PATH = path.join(__dirname, '..', 'data', 'menu.json');
-
-let menuCache = null;
-
-function load() {
-  if (menuCache) return menuCache;
-  try {
-    const raw = fs.readFileSync(MENU_PATH, 'utf-8');
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      throw new Error('menu.json must contain an array');
-    }
-    menuCache = parsed;
-    console.log(`✓ Loaded ${menuCache.length} menu items from data/menu.json`);
-    return menuCache;
-  } catch (err) {
-    console.error('✗ Failed to load menu.json:', err.message);
-    menuCache = [];
-    return menuCache;
-  }
+// Shape a DB row into the API response shape used by the frontend
+function rowToMenuItem(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    desc: row.description,
+    category: row.category,
+    emoji: row.emoji,
+    price: Number(row.price),
+    oldPrice: row.old_price !== null ? Number(row.old_price) : null,
+    rating: row.rating !== null ? Number(row.rating) : null,
+    prep: row.prep_minutes,
+    veg: row.is_veg,
+    popularity: row.popularity,
+    badges: row.badges || [],
+    featured: row.featured
+  };
 }
 
-// Load eagerly on require so we fail fast at boot
-load();
+// Parameterized query – no string concatenation (Task 614 Phase 2)
+exports.getAll = async ({ category } = {}) => {
+  let res;
+  if (category && category !== 'All') {
+    res = await pool.query(
+      'SELECT * FROM menu_items WHERE LOWER(category) = LOWER($1) ORDER BY popularity DESC',
+      [category]
+    );
+  } else {
+    res = await pool.query('SELECT * FROM menu_items ORDER BY popularity DESC');
+  }
+  return res.rows.map(rowToMenuItem);
+};
 
-exports.getAll = () => load();
-
-exports.findById = (id) => load().find((item) => item.id === id) || null;
-
-// Useful for testing — force a re-read from disk
-exports.reload = () => {
-  menuCache = null;
-  return load();
+exports.findById = async (id) => {
+  const res = await pool.query('SELECT * FROM menu_items WHERE id = $1', [id]);
+  return rowToMenuItem(res.rows[0]);
 };

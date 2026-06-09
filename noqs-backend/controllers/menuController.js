@@ -1,25 +1,18 @@
 const menuModel = require('../models/menuModel');
 
-exports.getMenu = (req, res, next) => {
+exports.getMenu = async (req, res, next) => {
   try {
     const { category } = req.query;
-    let items = menuModel.getAll();
-
-    if (category && category !== 'All') {
-      items = items.filter(
-        (i) => i.category.toLowerCase() === String(category).toLowerCase()
-      );
-    }
-
+    const items = await menuModel.getAll({ category });
     res.status(200).json(items);
   } catch (err) {
     next(err);
   }
 };
 
-exports.getMenuItem = (req, res, next) => {
+exports.getMenuItem = async (req, res, next) => {
   try {
-    const item = menuModel.findById(req.params.id);
+    const item = await menuModel.findById(req.params.id);
     if (!item) {
       return res.status(404).json({
         error: 'Not Found',
