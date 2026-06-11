@@ -1,6 +1,5 @@
 const pool = require('../db');
 
-// Shape a DB row into the API response shape used by the frontend
 function rowToMenuItem(row) {
   if (!row) return null;
   return {
@@ -20,7 +19,6 @@ function rowToMenuItem(row) {
   };
 }
 
-// Parameterized query – no string concatenation (Task 614 Phase 2)
 exports.getAll = async ({ category } = {}) => {
   let res;
   if (category && category !== 'All') {
@@ -36,5 +34,42 @@ exports.getAll = async ({ category } = {}) => {
 
 exports.findById = async (id) => {
   const res = await pool.query('SELECT * FROM menu_items WHERE id = $1', [id]);
+  return rowToMenuItem(res.rows[0]);
+};
+
+// Used by PUT /api/menu/:id  (Task 616 Phase 3 — invalidation trigger source)
+exports.update = async (id, patch) => {
+  const text = `
+    UPDATE menu_items SET
+      name         = COALESCE($1::text,    name),
+      description  = COALESCE($2::text,    description),
+      category     = COALESCE($3::text,    category),
+      emoji        = COALESCE($4::text,    emoji),
+      price        = COALESCE($5::numeric, price),
+      old_price    = COALESCE($6::numeric, old_price),
+      rating       = COALESCE($7::numeric, rating),
+      prep_minutes = COALESCE($8::int,     prep_minutes),
+      is_veg       = COALESCE($9::bool,    is_veg),
+      popularity   = COALESCE($10::int,    popularity),
+      badges       = COALESCE($11::text[], badges),
+      featured     = COALESCE($12::bool,   featured)
+    WHERE id = $13
+    RETURNING *`;
+  const v = [
+    patch.name ?? null,
+    patch.desc ?? patch.description ?? null,
+    patch.category ?? null,
+    patch.emoji ?? null,
+    patch.price ?? null,
+    patch.oldPrice ?? null,
+    patch.rating ?? null,
+    patch.prep ?? null,
+    typeof patch.veg === 'boolean' ? patch.veg : null,
+    patch.popularity ?? null,
+    Array.isArray(patch.badges) ? patch.badges : null,
+    typeof patch.featured === 'boolean' ? patch.featured : null,
+    id
+  ];
+  const res = await pool.query(text, v);
   return rowToMenuItem(res.rows[0]);
 };
