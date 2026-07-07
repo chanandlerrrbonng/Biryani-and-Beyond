@@ -18,6 +18,19 @@ CREATE TABLE IF NOT EXISTS branches (
   created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS users (
+  user_id       SERIAL PRIMARY KEY,
+  email         VARCHAR(255) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
+  name          VARCHAR(255) NOT NULL,
+  role          VARCHAR(20)  NOT NULL DEFAULT 'staff'
+                CHECK (role IN ('owner','staff','customer')),
+  merchant_id   VARCHAR(50) REFERENCES merchants(merchant_id) ON DELETE CASCADE,
+  branch_id     VARCHAR(50) REFERENCES branches(branch_id)   ON DELETE SET NULL,
+  is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ── Menu Items ──
 CREATE TABLE IF NOT EXISTS menu_items (
   id            VARCHAR(50) PRIMARY KEY,
@@ -33,8 +46,11 @@ CREATE TABLE IF NOT EXISTS menu_items (
   popularity    INTEGER NOT NULL DEFAULT 0,
   badges        TEXT[]  NOT NULL DEFAULT '{}',
   featured      BOOLEAN NOT NULL DEFAULT FALSE,
+  is_available  BOOLEAN NOT NULL DEFAULT TRUE,
+  stock_count   INTEGER,                       -- NULL = untracked / unlimited
   created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
 
 -- ── Orders ──
 CREATE TABLE IF NOT EXISTS orders (
@@ -67,6 +83,9 @@ CREATE TABLE IF NOT EXISTS order_items (
   emoji         VARCHAR(10)
 );
 
+CREATE INDEX IF NOT EXISTS idx_users_email    ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_merchant ON users(merchant_id);
+
 -- ── Seed initial branch data ──
 INSERT INTO merchants (merchant_id, name, contact_email)
 VALUES ('MERCH-NOQS-01', 'NoQs Digital Pvt Ltd', 'ops@noqs.in')
@@ -76,3 +95,7 @@ INSERT INTO branches (branch_id, merchant_id, name, city, address) VALUES
   ('BBSR-PURI-01',  'MERCH-NOQS-01', 'The Spice Garden – Puri Rd', 'Bhubaneswar', 'Puri Road, BBSR'),
   ('BBSR-PATIA-02', 'MERCH-NOQS-01', 'The Spice Garden – Patia',   'Bhubaneswar', 'Patia Square, BBSR')
 ON CONFLICT (branch_id) DO NOTHING;
+
+-- ── Migration: add availability + stock tracking to existing tables ──
+ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS is_available BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS stock_count  INTEGER;

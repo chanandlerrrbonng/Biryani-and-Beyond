@@ -2,19 +2,39 @@ const express = require('express');
 const orderController = require('../controllers/orderController');
 const validateOrder = require('../middleware/validateOrder');
 const validateOrderUpdate = require('../middleware/validateOrderUpdate');
+const { authenticate } = require('../middleware/authenticate');
+const { authorize } = require('../middleware/authorize');
+const orderModel = require('../models/orderModel'); 
 
 const router = express.Router();
 
-// POST /api/orders — create new order (validated)
+// Public: customers place orders without accounts.
 router.post('/orders', validateOrder, orderController.createOrder);
 
-// PUT /api/orders/:id — update order status / details (validated)
-router.put('/orders/:id', validateOrderUpdate, orderController.updateOrder);
+// Public: order tracking for customers (web or WhatsApp)
+router.get('/orders/:id/track', async (req, res, next) => {
+  try {
+    const order = await orderModel.findById(req.params.id);
+    if (!order) {
+      return res.status(404).json({ error: 'Not Found', message: 'Order not found' });
+    }
+    
+    // Public-safe projection: only return what the customer needs to see
+    res.json({
+      id: order.id,
+      status: order.status,
+      items: order.items.map(i => ({ name: i.name, qty: i.qty, emoji: i.emoji })),
+      total: order.totals.grandTotal,
+      createdAt: order.createdAt
+    });
+  } catch (err) { 
+    next(err); 
+  }
+});
 
-// GET /api/orders/:id — fetch one order
-router.get('/orders/:id', orderController.getOrder);
-
-// GET /api/orders — list all orders (admin/debug)
-router.get('/orders', orderController.listOrders);
+// Staff/owner: manage orders.
+router.put('/orders/:id', authenticate, authorize('owner', 'staff'), validateOrderUpdate, orderController.updateOrder);
+router.get('/orders/:id', authenticate, authorize('owner', 'staff'), orderController.getOrder);
+router.get('/orders',     authenticate, authorize('owner', 'staff'), orderController.listOrders);
 
 module.exports = router;

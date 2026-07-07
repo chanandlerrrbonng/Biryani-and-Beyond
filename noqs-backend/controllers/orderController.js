@@ -4,29 +4,25 @@ const orderModel = require('../models/orderModel');
 const ALLOWED_STATUSES = ['placed', 'confirmed', 'preparing', 'served', 'cancelled'];
 const STATUS_FLOW = { placed: ['confirmed', 'cancelled'], confirmed: ['preparing', 'cancelled'], preparing: ['served', 'cancelled'], served: [], cancelled: [] };
 
+const orderService = require('../services/orderService');
+const { scopeFilter } = require('../middleware/authorize');
+
 function generateOrderId() {
   return 'NOQS-' + Math.random().toString(36).slice(2, 8).toUpperCase();
 }
 
 exports.createOrder = async (req, res, next) => {
   try {
-    const { customer, tableId, branchId, items, totals, promoCode } = req.body;
-    const newOrder = {
-      id: generateOrderId(),
-      customer: { name: customer.name.trim(), phone: customer.phone, notes: customer.notes ? String(customer.notes).trim() : '' },
-      tableId: tableId || null,
-      branchId: branchId || 'BBSR-PURI-01',
-      items: items.map((i) => ({ id: i.id, name: i.name, price: Number(i.price), qty: Number(i.qty), emoji: i.emoji || null })),
-      totals: totals || null,
-      promoCode: promoCode || null,
-      status: 'placed',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    const saved = await orderModel.create(newOrder);
+    const saved = await orderService.createOrder(req.body);
     res.status(201).json(saved);
   } catch (err) {
+    // Surface validation-style errors as 400 (service throws typed errors)
+    if (err.status === 400) {
+      return res.status(400).json({ error: 'Bad Request', message: err.message, details: err.details });
+    }
+    if (err.status === 409) {
+      return res.status(409).json({ error: 'Conflict', message: err.message, code: err.code });
+    }
     next(err);
   }
 };
@@ -82,7 +78,7 @@ exports.getOrder = async (req, res, next) => {
 
 exports.listOrders = async (req, res, next) => {
   try {
-    const orders = await orderModel.list();
+    const orders = await orderModel.list(scopeFilter(req));
     res.status(200).json(orders);
   } catch (err) {
     next(err);

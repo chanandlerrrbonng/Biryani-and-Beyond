@@ -41,7 +41,7 @@ beforeAll(() => { app = buildApp(); });
 afterAll(async () => { await redis.quit(); });
 
 beforeEach(async () => {
-  queryCount = 0;
+  mockQueryCount = 0;
   // wipe mock redis between tests
   const client = redis.getClient();
   if (client.flushall) await client.flushall();

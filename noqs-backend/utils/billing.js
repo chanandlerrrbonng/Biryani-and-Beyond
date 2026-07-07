@@ -3,14 +3,15 @@
  * Designed to be 100% unit-testable.
  *
  * Conventions:
- *  - All monetary values are rupees (₹), rounded to 2 decimals on output.
- *  - Negative quantities/prices are treated as invalid and throw.
+ * - All monetary values are rupees (₹), rounded to 2 decimals on output.
+ * - Negative quantities/prices are treated as invalid and throw.
  */
 
 const TAX_RATE = 0.05;      // 5% GST (single-slab demo)
-const SERVICE_RATE = 0.10;  // 10% service charge (dine-in)
+const SERVICE_RATE = 0.05;  // 5% service — MUST match frontend display. (was 0.10)
 
 const PROMOS = {
+  NOQS10:    { type: 'percent', value: 10, maxOff: 100 },  // matches frontend
   WELCOME10: { type: 'percent', value: 10, maxOff: 100 },
   FLAT50:    { type: 'flat',    value: 50 },
   BIRYANI20: { type: 'percent', value: 20, maxOff: 150, appliesTo: 'Biryani' }

@@ -19,12 +19,12 @@ async function rowToOrder(row) {
     },
     promoCode: row.promo_code,
     totals: {
-      subtotal:  Number(row.subtotal),
-      discount:  Number(row.discount),
-      tax:       Number(row.tax),
-      service:   Number(row.service),
-      delivery:  Number(row.delivery),
-      grandTotal:Number(row.grand_total)
+      subtotal: Number(row.subtotal),
+      discount: Number(row.discount),
+      tax: Number(row.tax),
+      service: Number(row.service),
+      delivery: Number(row.delivery),
+      grandTotal: Number(row.grand_total)
     },
     items: itemsRes.rows.map(i => ({
       id: i.menu_item_id,
@@ -57,12 +57,12 @@ exports.create = async (order) => {
       order.id, order.branchId, order.tableId,
       order.customer.name, order.customer.phone, order.customer.notes || '',
       order.promoCode,
-      order.totals?.subtotal  ?? 0,
-      order.totals?.discount  ?? 0,
-      order.totals?.tax       ?? 0,
-      order.totals?.service   ?? 0,
-      order.totals?.delivery  ?? 0,
-      order.totals?.grandTotal?? 0,
+      order.totals?.subtotal ?? 0,
+      order.totals?.discount ?? 0,
+      order.totals?.tax ?? 0,
+      order.totals?.service ?? 0,
+      order.totals?.delivery ?? 0,
+      order.totals?.grandTotal ?? 0,
       order.status, order.createdAt, order.updatedAt
     ];
 
@@ -73,8 +73,52 @@ exports.create = async (order) => {
       VALUES ($1,$2,$3,$4,$5,$6)`;
 
     for (const i of order.items) {
+      // ── Atomic stock decrement ──
+      // Single UPDATE with a guard in WHERE means Postgres row-locks this
+      // row for the duration of the statement, so two concurrent orders for
+      // the last item can't both succeed (whichever commits first wins,
+      // the other's WHERE clause simply matches 0 rows).
+      // stock_count IS NULL = untracked item → always allowed, never decremented.
+      const stockRes = await client.query(
+        `UPDATE menu_items
+           SET stock_count = CASE
+                 WHEN stock_count IS NULL THEN NULL
+                 ELSE stock_count - $1
+               END,
+               is_available = CASE
+                 WHEN stock_count IS NULL THEN is_available
+                 WHEN stock_count - $1 <= 0 THEN FALSE
+                 ELSE is_available
+               END
+         WHERE id = $2
+           AND (stock_count IS NULL OR stock_count >= $1)
+         RETURNING id, stock_count, is_available`,
+        [i.qty, i.id]
+      );
+
+      if (stockRes.rowCount === 0) {
+        const check = await client.query(
+          'SELECT stock_count FROM menu_items WHERE id = $1',
+          [i.id]
+        );
+
+        const left = check.rows[0]?.stock_count;
+
+        const err = new Error(
+          `Insufficient stock for "${i.name}"${left != null ? ` (only ${left} left)` : ''}`
+        );
+        err.status = 409;
+        err.code = 'INSUFFICIENT_STOCK';
+        throw err; // caught below → ROLLBACK, nothing gets created
+      }
+
       await client.query(insertItemText, [
-        order.id, i.id, i.name, i.price, i.qty, i.emoji
+        order.id,
+        i.id,
+        i.name,
+        i.price,
+        i.qty,
+        i.emoji
       ]);
     }
 
@@ -93,14 +137,28 @@ exports.findById = async (id) => {
   return await rowToOrder(res.rows[0]);
 };
 
-exports.list = async () => {
-  const res = await pool.query('SELECT * FROM orders ORDER BY created_at DESC');
+// Accepts an optional scope { merchantId, branchId } for tenant isolation
+// (owner/staff only ever see their own merchant's orders).
+exports.list = async (scope = {}) => {
+  const clauses = [];
+  const params = [];
+
+  if (scope.branchId) {
+    params.push(scope.branchId);
+    clauses.push(`o.branch_id = $${params.length}`);
+  } else if (scope.merchantId) {
+    params.push(scope.merchantId);
+    clauses.push(`o.branch_id IN (SELECT branch_id FROM branches WHERE merchant_id = $${params.length})`);
+  }
+
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+  const res = await pool.query(
+    `SELECT o.* FROM orders o ${where} ORDER BY o.created_at DESC`,
+    params
+  );
   return await Promise.all(res.rows.map(rowToOrder));
 };
 
-// FIX: explicit ::type casts on every parameter so Postgres can infer types
-// even when the JS value is `null`. Without these casts, COALESCE($1, status)
-// throws "could not determine data type of parameter $1".
 exports.update = async (id, patch) => {
   const updateText = `
     UPDATE orders SET
@@ -114,10 +172,10 @@ exports.update = async (id, patch) => {
 
   const values = [
     patch.status ?? null,
-    patch.customer?.name  ?? null,
+    patch.customer?.name ?? null,
     patch.customer?.phone ?? null,
     patch.customer?.notes ?? null,
-    patch.updatedAt,
+    new Date().toISOString(),
     id
   ];
 

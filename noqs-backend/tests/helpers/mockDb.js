@@ -134,3 +134,25 @@ function createMockDb(seed = {}) {
 }
 
 module.exports = { createMockDb };
+
+    // ── users ──
+    if (sql.startsWith('select * from users where lower(email)')) {
+      const email = String(params[0]).toLowerCase();
+      const row = state.users.find(u => u.email.toLowerCase() === email);
+      return Promise.resolve({ rows: row ? [row] : [], rowCount: row ? 1 : 0 });
+    }
+    if (sql.startsWith('select * from users where user_id =')) {
+      const row = state.users.find(u => u.user_id === params[0]);
+      return Promise.resolve({ rows: row ? [row] : [], rowCount: row ? 1 : 0 });
+    }
+    if (sql.startsWith('select count(*)') && sql.includes('users')) {
+      return Promise.resolve({ rows: [{ n: state.users.length }], rowCount: 1 });
+    }
+    if (sql.startsWith('update menu_items set is_available')) {
+      const id = params[1];
+      const idx = state.menu_items.findIndex(m => m.id === id);
+      if (idx === -1) return Promise.resolve({ rows: [], rowCount: 0 });
+      state.menu_items[idx] = { ...state.menu_items[idx], is_available: params[0] };
+      return Promise.resolve({ rows: [state.menu_items[idx]], rowCount: 1 });
+    }
+

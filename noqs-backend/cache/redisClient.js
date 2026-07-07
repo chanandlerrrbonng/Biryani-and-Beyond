@@ -23,7 +23,7 @@ function buildClient() {
   const r = new Redis(url, {
     lazyConnect: false,
     maxRetriesPerRequest: 2,
-    enableOfflineQueue: false
+    enableOfflineQueue: true
   });
   r.on('error', (e) => console.error('[redis] error:', e.message));
   r.on('connect', () => console.log(`[redis] connected → ${url}`));
