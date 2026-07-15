@@ -64,8 +64,8 @@ describe('billing — tax & service', () => {
   test('tax = 5% of taxable', () => {
     expect(calcTax(1000)).toBe(50);
   });
-  test('service = 10% of taxable (dine-in)', () => {
-    expect(calcService(1000)).toBe(100);
+  test('service = 5% of taxable (dine-in)', () => {
+    expect(calcService(1000)).toBe(50);
   });
 });
 
@@ -76,17 +76,17 @@ describe('billing — calcTotals integration', () => {
     expect(t.subtotal).toBe(400);
     expect(t.discount).toBe(0);
     expect(t.tax).toBe(20);
-    expect(t.service).toBe(40);
-    expect(t.grandTotal).toBe(460);
+    expect(t.service).toBe(20);
+    expect(t.grandTotal).toBe(440);
   });
 
   test('with FLAT50 + dine-in', () => {
     const items = [{ id: 'a', price: 200, qty: 2, category: 'Mains' }];
     const t = calcTotals({ items, promoCode: 'FLAT50' });
-    // subtotal 400, discount 50, taxable 350, tax 17.5, service 35, total 402.5
+    // subtotal 400, discount 50, taxable 350, tax 17.5, service 17.5, total 385
     expect(t).toEqual({
       subtotal: 400, discount: 50, tax: 17.5,
-      service: 35, delivery: 0, grandTotal: 402.5
+      service: 17.5, delivery: 0, grandTotal: 385
     });
   });
 

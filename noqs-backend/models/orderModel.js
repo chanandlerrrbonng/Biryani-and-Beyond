@@ -46,25 +46,22 @@ exports.create = async (order) => {
     await client.query('BEGIN');
 
     const insertOrderText = `
-      INSERT INTO orders (
-        order_id, branch_id, table_id, customer_name, customer_phone, customer_notes,
-        promo_code, subtotal, discount, tax, service, delivery, grand_total, status,
-        created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
-      RETURNING *`;
+  INSERT INTO orders (
+    order_id, branch_id, table_id, customer_name, customer_phone, customer_notes,
+    promo_code, subtotal, discount, tax, service, delivery, grand_total, status,
+    source, created_at, updated_at
+  ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+  RETURNING *`;
 
-    const orderValues = [
-      order.id, order.branchId, order.tableId,
-      order.customer.name, order.customer.phone, order.customer.notes || '',
-      order.promoCode,
-      order.totals?.subtotal ?? 0,
-      order.totals?.discount ?? 0,
-      order.totals?.tax ?? 0,
-      order.totals?.service ?? 0,
-      order.totals?.delivery ?? 0,
-      order.totals?.grandTotal ?? 0,
-      order.status, order.createdAt, order.updatedAt
-    ];
+const orderValues = [
+  order.id, order.branchId, order.tableId,
+  order.customer.name, order.customer.phone, order.customer.notes || '',
+  order.promoCode,
+  order.totals?.subtotal ?? 0, order.totals?.discount ?? 0,
+  order.totals?.tax ?? 0, order.totals?.service ?? 0,
+  order.totals?.delivery ?? 0, order.totals?.grandTotal ?? 0,
+  order.status, order.source || 'web', order.createdAt, order.updatedAt
+];
 
     const orderRes = await client.query(insertOrderText, orderValues);
 

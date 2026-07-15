@@ -3,13 +3,16 @@ const OpenAI = require('openai');
 const sessionStore = require('./sessionStore');
 const { toolSchemas, toolMap } = require('./tools');
 
-const MODEL = process.env.GROQ_MODEL || 'meta-llama/llama-4-scout-17b-16e-instruct';
+// gpt-oss-120b is the recommended replacement for the now-retired
+// meta-llama/llama-4-scout model. It has strong NATIVE tool-calling,
+// so the text-embedded-tool-call fallbacks below rarely fire now.
+const MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
 const HISTORY_TURNS = Number(process.env.AGENT_HISTORY_TURNS || 10);
 const MAX_TOOL_ROUNDS = 8;
+// gpt-oss models expose a reasoning_effort knob. 'low' keeps the
+// ordering assistant fast; bump to 'medium' if you want richer replies.
+const REASONING_EFFORT = process.env.GROQ_REASONING_EFFORT || 'low';
 
-// Lazy singleton — do NOT construct at module load time.
-// Constructing eagerly means a missing/empty GROQ_API_KEY crashes the
-// entire server on `require()`, before any of our own error handling runs.
 let _client = null;
 function getClient() {
   if (_client) return _client;
@@ -38,7 +41,8 @@ CRITICAL RULES — FOLLOW THESE EXACTLY:
 10. Be warm and helpful. Use food emoji occasionally. Prices are in ₹ (Indian Rupees).
 11. If the customer asks for "best", "top rated", "popular", or "highest rated" items — use search_menu with an empty query to get all items, then pick the highest-rated ones from the results.
 12. If the customer asks for "chef's special" or "chef's pick" — search for items and filter for ones with chef badges.
-13. Respond ONLY in natural language. Your replies must be conversational text that a customer would enjoy reading. Never include raw JSON, code, or technical output.`;
+13. Respond ONLY in natural language. Your replies must be conversational text that a customer would enjoy reading. Never include raw JSON, code, or technical output.
+14. LANGUAGE: Reply in the SAME language the customer used. If they wrote in Hindi (or Hinglish, Telugu, Tamil, etc.), respond in that language. Keep item names as they appear on the menu.`;
 
 function trimHistory(history) {
   const max = HISTORY_TURNS * 4;
@@ -79,10 +83,12 @@ function containsToolCallJSON(text) {
     /\{\s*"name"\s*:\s*"(search_menu|add_to_cart|remove_from_cart|view_cart|place_order|check_order_status)"/.test(text);
 }
 
-async function handleMessage({ sessionKey, text, customerPhone } = {}) {
+async function handleMessage({ sessionKey, text, customerPhone, contactName } = {}) {
   const session = await sessionStore.load(sessionKey);
   if (customerPhone) session.customerPhone = customerPhone;
-
+  if (contactName && !session.customerName) {
+    session.customerName = contactName;
+  }
   if (session.mode === 'human') {
     session.history.push({ role: 'user', content: text });
     await sessionStore.save(session);
@@ -116,7 +122,9 @@ async function handleMessage({ sessionKey, text, customerPhone } = {}) {
         messages,
         tools: toolSchemas,
         tool_choice: 'auto',
-        temperature: 0.2
+        temperature: 0.2,
+        // gpt-oss reasoning knob — ignored gracefully by non-reasoning models.
+        reasoning_effort: REASONING_EFFORT
       });
     } catch (e) {
       console.error('[agent] LLM call failed:', e.message);

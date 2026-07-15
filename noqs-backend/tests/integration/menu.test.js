@@ -6,7 +6,7 @@
 const path = require('path');
 
 // ── Phase 3: mock the db module BEFORE requiring app ──
-const seedMenu = [
+const mockSeedMenu = [
   { id: 'butter-chicken', name: 'Butter Chicken', description: 'Creamy', category: 'Mains',
     emoji: '🥘', price: 329, old_price: 379, rating: 4.9, prep_minutes: 20,
     is_veg: false, popularity: 97, badges: ['nonveg'], featured: true },
@@ -17,7 +17,7 @@ const seedMenu = [
 
 jest.mock('../../db', () => {
   const { createMockDb } = require('../helpers/mockDb');
-  const { pool } = createMockDb({ menu_items: seedMenu });
+  const { pool } = createMockDb({ menu_items: mockSeedMenu });
   return pool;
 });
 

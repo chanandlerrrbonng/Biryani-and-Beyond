@@ -11,11 +11,25 @@ function register(socket, io) {
   socket.on('merchant:reply', async ({ sessionKey, text } = {}) => {
     try {
       if (!sessionKey || !text) return;
+
       const session = await sessionStore.load(sessionKey);
-      session.history.push({ role: 'assistant', content: text });
+
+      session.history.push({
+        role: 'assistant',
+        content: text
+      });
+
       await sessionStore.save(session);
 
-      await sendWhatsAppReply(sessionKey, text);
+      const sendResult = await sendWhatsAppReply(sessionKey, text);
+
+      if (sendResult && sendResult.ok === false) {
+        socket.emit('conversation:send_error', {
+          sessionKey,
+          message:
+            'Message not delivered (possibly outside WhatsApp 24h window — a template is required).'
+        });
+      }
 
       io.emit('conversation:update', {
         sessionKey,
@@ -38,8 +52,10 @@ function register(socket, io) {
   socket.on('merchant:mode', async ({ sessionKey, mode } = {}) => {
     try {
       if (!sessionKey || !['bot', 'human'].includes(mode)) return;
+
       const session = await sessionStore.load(sessionKey);
       session.mode = mode;
+
       await sessionStore.save(session);
 
       io.emit('conversation:mode', {

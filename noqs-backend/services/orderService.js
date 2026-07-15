@@ -25,7 +25,15 @@ function badRequest(message, details) {
  * @returns saved order
  */
 async function createOrder(input = {}) {
-  const { customer = {}, tableId, branchId, items, promoCode = null, dineIn = true } = input;
+  const {
+    customer = {},
+    tableId,
+    branchId,
+    items,
+    promoCode = null,
+    dineIn = true,
+    source
+  } = input;
 
   if (!Array.isArray(items) || items.length === 0) {
     throw badRequest('items must be a non-empty array');
@@ -37,8 +45,12 @@ async function createOrder(input = {}) {
     const menuItem = await menuModel.findById(line.id);
     if (!menuItem) throw badRequest(`Unknown menu item: ${line.id}`);
     if (menuItem.available === false) throw badRequest(`Item unavailable: ${menuItem.name}`);
+
     const qty = Number(line.qty);
-    if (!Number.isInteger(qty) || qty < 1) throw badRequest(`Invalid qty for ${line.id}`);
+    if (!Number.isInteger(qty) || qty < 1) {
+      throw badRequest(`Invalid qty for ${line.id}`);
+    }
+
     priced.push({
       id: menuItem.id,
       name: menuItem.name,
@@ -66,6 +78,7 @@ async function createOrder(input = {}) {
     items: priced.map(({ category, ...keep }) => keep), // strip category for storage
     totals,
     promoCode,
+    source: source || 'web',
     status: 'placed',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()

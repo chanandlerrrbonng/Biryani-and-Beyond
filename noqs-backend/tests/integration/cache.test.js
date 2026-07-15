@@ -5,7 +5,7 @@
  *  - PUT /api/menu/:id → invalidates list + item
  */
 
-const seedMenu = [
+const mockSeedMenu = [
   { id: 'butter-chicken', name: 'Butter Chicken', description: '', category: 'Mains',
     emoji: '🥘', price: 329, old_price: null, rating: 4.9, prep_minutes: 20,
     is_veg: false, popularity: 97, badges: [], featured: true }
@@ -22,7 +22,7 @@ let mockQueryCount = 0;
 
 jest.mock('../../db', () => {
   const { createMockDb } = require('../helpers/mockDb');
-  const { pool } = createMockDb({ menu_items: seedMenu });
+  const { pool } = createMockDb({ menu_items: mockSeedMenu });
   const realQuery = pool.query;
   // Intercepting and incrementing our tracking counter securely
   pool.query = (...args) => { 
@@ -31,6 +31,24 @@ jest.mock('../../db', () => {
   };
   return pool;
 });
+
+// Bypass authenticate and authorize middleware for cache integration testing
+jest.mock('../../middleware/authenticate', () => ({
+  authenticate: (req, res, next) => {
+    req.user = { userId: 1, role: 'owner', merchantId: 'MERCH-NOQS-01' };
+    next();
+  },
+  attachUserIfPresent: (req, res, next) => {
+    req.user = { userId: 1, role: 'owner', merchantId: 'MERCH-NOQS-01' };
+    next();
+  },
+  extractToken: () => 'mock-token'
+}));
+
+jest.mock('../../middleware/authorize', () => ({
+  authorize: () => (req, res, next) => next(),
+  scopeFilter: (req) => ({ merchantId: 'MERCH-NOQS-01', branchId: null })
+}));
 
 const request = require('supertest');
 const { buildApp } = require('../../app');

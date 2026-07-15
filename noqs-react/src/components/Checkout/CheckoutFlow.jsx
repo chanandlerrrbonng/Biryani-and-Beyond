@@ -65,12 +65,20 @@ async function placeOrder() {
         dineIn: true
       })
     });
+
     const data = await res.json();
+
     if (!res.ok) {
       alert((data.details || [data.message]).join('\n'));
       return;
     }
+
     dispatch({ type: 'PLACED', id: data.id });
+
+    try {
+      localStorage.setItem('noqs:lastOrderId', data.id);
+    } catch {}
+
   } catch (err) {
     console.error('[order] place order failed:', err);
     alert('Could not reach the kitchen. Please try again.');

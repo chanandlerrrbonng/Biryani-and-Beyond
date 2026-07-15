@@ -8,7 +8,7 @@ const { handleMessage } = require('../agent/agentService');
 const { toLocal10 } = require('../utils/phone');
 const { sendWhatsAppReply } = require('../services/whatsappSender');
 const { emitConversationUpdate, emitHumanInbound } = require('../realtime/io');
-const sessionStore = require('../agent/sessionStore');
+const { transcribeWhatsAppVoiceNote } = require('../services/voiceTranscription');
 
 const DEDUPE_TTL_SECONDS = 86400;
 
@@ -19,70 +19,167 @@ async function alreadyProcessed(messageId) {
   return result === null;
 }
 
+async function resolveMessageText({ type, text, audioId, audioMime }) {
+  if (type === 'text') {
+    if (!text || !text.trim()) {
+      const e = new Error('Empty text message body');
+      e.code = 'EMPTY_TEXT';
+      throw e;
+    }
+    return { text, wasVoice: false };
+  }
+
+  if (type === 'audio' || type === 'voice' || audioId) {
+    if (!audioId) {
+      const e = new Error('Audio message has no media ID');
+      e.code = 'NO_MEDIA_ID';
+      throw e;
+    }
+    const transcript = await transcribeWhatsAppVoiceNote(audioId);
+    return { text: transcript, wasVoice: true };
+  }
+
+  const e = new Error(`Unsupported message type: ${type}`);
+  e.code = 'UNSUPPORTED_TYPE';
+  throw e;
+}
+
 async function processMessage(job) {
-  const { messageId, from, type, text } = job.data;
+  const {
+    messageId,
+    from,
+    contactName,
+    type,
+    text,
+    audioId,
+    audioMime
+  } = job.data;
 
   if (await alreadyProcessed(messageId)) {
     console.log(`[worker] duplicate ${messageId} — skipping`);
-    return { skipped: true, reason: 'duplicate' };
+    return {
+      skipped: true,
+      reason: 'duplicate'
+    };
   }
 
-  // Voice (3.5) intentionally skipped for now — text only.
-  if (type !== 'text' || !text) {
-    console.log(`[worker] non-text message type "${type}" — not handled yet`);
-    await sendWhatsAppReply(from, 'For now I can only read text messages. Please type your order!');
-    return { skipped: true, reason: 'unsupported-type' };
+  // Resolve text (typed OR transcribed voice) before the agent runs.
+  let resolved;
+
+  try {
+    resolved = await resolveMessageText({
+      type,
+      text,
+      audioId,
+      audioMime
+    });
+  } catch (err) {
+    console.warn(
+      `[worker] could not resolve message ${messageId} (${err.code}): ${err.message}`
+    );
+
+    if (err.code === 'UNSUPPORTED_TYPE') {
+      await sendWhatsAppReply(
+        from,
+        'I can read text and voice notes right now — please send one of those!'
+      );
+    } else if (err.code === 'NO_WHATSAPP_TOKEN') {
+      await sendWhatsAppReply(
+        from,
+        "I can't listen to voice notes in this test setup yet — please type your order for now. 🙏"
+      );
+    } else if (err.code === 'NO_TRANSCRIPTION_KEY') {
+      await sendWhatsAppReply(
+        from,
+        "Sorry, voice ordering isn't configured yet. Please type your order."
+      );
+    } else {
+      await sendWhatsAppReply(
+        from,
+        "I couldn't quite hear that voice note — could you resend it or type your order? 🙏"
+      );
+    }
+
+    return {
+      skipped: true,
+      reason: err.code || 'resolve-failed'
+    };
   }
 
-  console.log(`[worker] processing ${messageId} from ${from}: "${text}"`);
+  const messageText = resolved.text;
+
+  if (resolved.wasVoice) {
+    console.log(
+      `[worker] transcribed voice ${messageId} from ${from}: "${messageText}"`
+    );
+  } else {
+    console.log(
+      `[worker] processing ${messageId} from ${from}: "${messageText}"`
+    );
+  }
 
   const { reply, humanMode, session } = await handleMessage({
     sessionKey: from,
-    text,
-    customerPhone: toLocal10(from)
+    text: messageText,
+    customerPhone: toLocal10(from),
+    contactName
   });
 
   if (humanMode) {
-    console.log(`[worker] session ${from} is in HUMAN mode — routing to merchant.`);
+    console.log(
+      `[worker] session ${from} is in HUMAN mode — routing to merchant.`
+    );
+
     emitHumanInbound({
       sessionKey: from,
       phone: from,
-      userText: text,
+      userText: messageText,
+      isVoice: resolved.wasVoice,
       at: new Date().toISOString()
     });
-    // Also push a conversation:update so the inbox thread stays current.
+
     emitConversationUpdate({
       sessionKey: from,
       phone: from,
-      userText: text,
+      userText: messageText,
       reply: null,
       mode: 'human',
       cart: session?.cart || [],
       stage: session?.stage,
       orderId: session?.orderId || null,
       by: 'customer',
+      isVoice: resolved.wasVoice,
       at: new Date().toISOString()
     });
-    return { humanMode: true };
+
+    return {
+      humanMode: true
+    };
   }
 
-  await sendWhatsAppReply(from, reply);
+  const sendResult = await sendWhatsAppReply(from, reply);
+  if (!sendResult.ok && !sendResult.simulated) {
+    console.error(`[worker] WhatsApp send FAILED for ${from}:`, sendResult);
+  }
 
-  // Push the full exchange to the live merchant inbox.
   emitConversationUpdate({
     sessionKey: from,
     phone: from,
-    userText: text,
+    userText: messageText,
     reply,
     mode: session?.mode || 'bot',
     cart: session?.cart || [],
     stage: session?.stage,
     orderId: session?.orderId || null,
     by: 'bot',
+    isVoice: resolved.wasVoice,
     at: new Date().toISOString()
   });
 
-  return { skipped: false, reply };
+  return {
+    skipped: false,
+    reply
+  };
 }
 
 const worker = new Worker(QUEUE_NAME, processMessage, {

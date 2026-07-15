@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import { adminApi } from './adminApi.js';
+import { getStoredToken } from './adminApi.js';
 
 const SOCKET_URL =
   import.meta.env.VITE_SOCKET_URL ||
@@ -29,7 +30,7 @@ export default function InboxAdmin() {
 
   // Socket connection for live updates
   useEffect(() => {
-    const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
+    const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'], auth: { token: getStoredToken() } });
     socketRef.current = socket;
 
     socket.on('connect', () => setConnected(true));

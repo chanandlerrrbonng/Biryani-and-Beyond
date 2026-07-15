@@ -99,3 +99,4 @@ ON CONFLICT (branch_id) DO NOTHING;
 -- ── Migration: add availability + stock tracking to existing tables ──
 ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS is_available BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS stock_count  INTEGER;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS source VARCHAR(20) NOT NULL DEFAULT 'web';

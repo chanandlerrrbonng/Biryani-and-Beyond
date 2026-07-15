@@ -1,36 +1,30 @@
-/**
- * WhatsApp Cloud API outbound sender.
- *
- * In demo/dev (no WHATSAPP_TOKEN configured) this logs the reply and returns.
- * When real credentials are present it POSTs to the Graph API.
- */
-
-const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN || '';
-const WHATSAPP_PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || '';
 const GRAPH_VERSION = process.env.WHATSAPP_GRAPH_VERSION || 'v21.0';
 
 async function sendWhatsAppReply(to, text) {
   if (!text) return { skipped: true };
 
-  if (!WHATSAPP_TOKEN || !WHATSAPP_PHONE_ID) {
-    // Demo mode — no real WhatsApp creds yet.
-    console.log(`[whatsapp-send] → ${to}: ${text}`);
+  const token = process.env.WHATSAPP_TOKEN || '';
+  const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID || '';
+
+  if (!token || !phoneId) {
+    console.log(`[whatsapp-send] (simulated) → ${to}: ${text}`);
     return { simulated: true };
   }
 
-  const url = `https://graph.facebook.com/${GRAPH_VERSION}/${WHATSAPP_PHONE_ID}/messages`;
+  const url = `https://graph.facebook.com/${GRAPH_VERSION}/${phoneId}/messages`;
   try {
     const res = await fetch(url, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         messaging_product: 'whatsapp',
-        to,
+        recipient_type: 'individual',
+        to: String(to).replace(/\D/g, ''), // digits only, no '+'
         type: 'text',
-        text: { body: text }
+        text: { preview_url: false, body: text.slice(0, 4096) } // WA hard limit
       })
     });
     if (!res.ok) {
@@ -38,6 +32,7 @@ async function sendWhatsAppReply(to, text) {
       console.error(`[whatsapp-send] failed ${res.status}: ${body}`);
       return { ok: false, status: res.status };
     }
+    console.log(`[whatsapp-send] success → ${to}`);
     return { ok: true };
   } catch (e) {
     console.error('[whatsapp-send] error:', e.message);

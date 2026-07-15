@@ -15,7 +15,8 @@ function createMockDb(seed = {}) {
     orders: seed.orders ? [...seed.orders] : [],
     order_items: seed.order_items ? [...seed.order_items] : [],
     merchants: seed.merchants || [],
-    branches: seed.branches || []
+    branches: seed.branches || [],
+    users: seed.users ? [...seed.users] : []
   };
 
   function query(text, params = []) {
@@ -43,7 +44,7 @@ function createMockDb(seed = {}) {
 
     // ── menu update ──
     if (sql.startsWith('update menu_items set')) {
-      const id = params[12];
+      const id = params[params.length - 1];
       const idx = state.menu_items.findIndex(m => m.id === id);
       if (idx === -1) return Promise.resolve({ rows: [], rowCount: 0 });
       const cur = state.menu_items[idx];
@@ -60,7 +61,9 @@ function createMockDb(seed = {}) {
         is_veg:      params[8]  ?? cur.is_veg,
         popularity:  params[9]  ?? cur.popularity,
         badges:      params[10] ?? cur.badges,
-        featured:    params[11] ?? cur.featured
+        featured:    params[11] ?? cur.featured,
+        is_available:params[12] ?? cur.is_available,
+        stock_count: params[13] ?? cur.stock_count
       };
       state.menu_items[idx] = next;
       return Promise.resolve({ rows: [next], rowCount: 1 });
@@ -116,25 +119,6 @@ function createMockDb(seed = {}) {
       return Promise.resolve({ rows: [next], rowCount: 1 });
     }
 
-    // analytics — return empty aggregates, tests don't need real shape
-    return Promise.resolve({ rows: [], rowCount: 0 });
-  }
-
-  const pool = {
-    query,
-    connect: async () => ({
-      query,
-      release: () => {}
-    }),
-    on: () => {},
-    ready: Promise.resolve()
-  };
-
-  return { pool, _state: state };
-}
-
-module.exports = { createMockDb };
-
     // ── users ──
     if (sql.startsWith('select * from users where lower(email)')) {
       const email = String(params[0]).toLowerCase();
@@ -155,4 +139,23 @@ module.exports = { createMockDb };
       state.menu_items[idx] = { ...state.menu_items[idx], is_available: params[0] };
       return Promise.resolve({ rows: [state.menu_items[idx]], rowCount: 1 });
     }
+
+    // analytics — return empty aggregates, tests don't need real shape
+    return Promise.resolve({ rows: [], rowCount: 0 });
+  }
+
+  const pool = {
+    query,
+    connect: async () => ({
+      query,
+      release: () => {}
+    }),
+    on: () => {},
+    ready: Promise.resolve()
+  };
+
+  return { pool, _state: state };
+}
+
+module.exports = { createMockDb };
 

@@ -22,7 +22,18 @@ function buildApp() {
     'http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173'
   ).split(',').map(s => s.trim()).filter(Boolean);
 
-  // WhatsApp webhook mounted first (it acks before body parsing concerns).
+  // ── WhatsApp webhook: needs the RAW body for HMAC signature verification. ──
+  // We mount a JSON parser scoped ONLY to this path, using the `verify` hook to
+  // stash the raw bytes on req.rawBody BEFORE JSON.parse mutates nothing (parse
+  // still produces req.body for the controller). The GET verification handshake
+  // carries no body, so this is a no-op for it.
+  app.use(
+    '/api/webhooks/whatsapp',
+    express.json({
+      limit: '1mb',
+      verify: (req, _res, buf) => { req.rawBody = buf; }
+    })
+  );
   app.use('/api', whatsappRoutes);
 
   app.use(cors({
@@ -37,7 +48,7 @@ function buildApp() {
     maxAge: 86400
   }));
 
-  app.use(express.json({ limit: '100kb' }));
+  app.use(express.json({ limit: process.env.JSON_LIMIT || '100kb' }));
   app.use(cookieParser());
   app.use(timing);
   app.use(requestLogger);

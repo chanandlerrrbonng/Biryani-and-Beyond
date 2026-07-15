@@ -15,6 +15,7 @@ function emptySession(sessionKey) {
     stage: 'browsing',
     orderId: null,
     mode: 'bot',
+    customerName: null,
     customerPhone: null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()

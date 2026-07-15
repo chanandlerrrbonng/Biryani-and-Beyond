@@ -1,11 +1,11 @@
 const bcrypt = require('bcryptjs');
 
-const seedUsers = [{
+const mockSeedUsers = [{
   user_id: 1, email: 'owner@noqs.in',
   password_hash: bcrypt.hashSync('secret12345', 10),
   name: 'Owner', role: 'owner', merchant_id: 'MERCH-NOQS-01', branch_id: null, is_active: true
 }];
-const seedMenu = [{
+const mockSeedMenu = [{
   id: 'butter-chicken', name: 'Butter Chicken', description: '', category: 'Mains',
   emoji: '🥘', price: 329, old_price: null, rating: 4.9, prep_minutes: 20,
   is_veg: false, popularity: 97, badges: [], featured: true, is_available: true, stock_count: null
@@ -13,7 +13,7 @@ const seedMenu = [{
 
 jest.mock('../../db', () => {
   const { createMockDb } = require('../helpers/mockDb');
-  const { pool } = createMockDb({ users: seedUsers, menu_items: seedMenu });
+  const { pool } = createMockDb({ users: mockSeedUsers, menu_items: mockSeedMenu });
   return pool;
 });
 
