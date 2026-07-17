@@ -176,7 +176,7 @@ const viewCart = {
   },
   async run(_args, session) {
     if (!session.cart.length) return { empty: true, message: 'The cart is empty. Would you like to browse the menu?' };
-    const totals = calcTotals({ items: session.cart, promoCode: null, dineIn: true });
+    const totals = calcTotals({ items: session.cart, promoCode: session.promoCode || null, dineIn: true });
     return {
       items: summariseCart(session).items,
       totals,
@@ -216,6 +216,7 @@ const placeOrder = {
       const saved = await orderService.createOrder({
         customer: { name: customerName, phone: session.customerPhone || null, notes },
         items: session.cart.map((i) => ({ id: i.id, qty: i.qty })),
+        promoCode: session.promoCode || null,
         branchId: process.env.DEFAULT_BRANCH_ID || 'BBSR-PURI-01',
         dineIn: true,
         source: 'whatsapp'
@@ -223,6 +224,7 @@ const placeOrder = {
       session.orderId = saved.id;
       session.stage = 'order_placed';
       session.cart = [];
+      session.promoCode = null; // Clear promo code on success
       return {
         ok: true,
         orderId: saved.id,
@@ -268,8 +270,45 @@ const checkOrderStatus = {
   }
 };
 
+// ── apply_promo_code ──
+const applyPromoCode = {
+  schema: {
+    type: 'function',
+    function: {
+      name: 'apply_promo_code',
+      description: 'Apply a discount promo code to the cart. Valid promo codes are: NOQS10, WELCOME10, FLAT50, BIRYANI20.',
+      parameters: {
+        type: 'object',
+        properties: {
+          promoCode: {
+            type: 'string',
+            description: 'The promo code to apply, e.g. "FLAT50", "WELCOME10"'
+          }
+        },
+        required: ['promoCode']
+      }
+    }
+  },
+  async run(args, session) {
+    const { promoCode } = args || {};
+    const code = String(promoCode).trim().toUpperCase();
+    const { PROMOS } = require('../utils/billing');
+    if (!PROMOS[code]) {
+      return { ok: false, error: `Invalid promo code "${promoCode}". Please check and try again.` };
+    }
+    session.promoCode = code;
+    const totals = calcTotals({ items: session.cart, promoCode: code, dineIn: true });
+    return {
+      ok: true,
+      promoCode: code,
+      totals,
+      message: `Promo code "${code}" has been applied successfully!`
+    };
+  }
+};
+
 // ── registry ──
-const TOOLS = [searchMenu, addToCart, removeFromCart, viewCart, placeOrder, checkOrderStatus];
+const TOOLS = [searchMenu, addToCart, removeFromCart, viewCart, placeOrder, checkOrderStatus, applyPromoCode];
 
 const toolSchemas = TOOLS.map((t) => t.schema);
 const toolMap = Object.fromEntries(TOOLS.map((t) => [t.schema.function.name, t]));

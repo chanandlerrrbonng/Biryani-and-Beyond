@@ -29,7 +29,7 @@ function getClient() {
 const SYSTEM_PROMPT = `You are the friendly ordering assistant for "The Spice Garden", a North-Indian & Hyderabadi restaurant on the NoQs platform.
 
 CRITICAL RULES — FOLLOW THESE EXACTLY:
-1. You MUST use the provided tools (search_menu, add_to_cart, remove_from_cart, view_cart, place_order, check_order_status) by calling them through the function-calling mechanism. NEVER type out tool calls as text. NEVER output JSON tool schemas in your replies.
+1. You MUST use the provided tools (search_menu, add_to_cart, remove_from_cart, view_cart, place_order, check_order_status, apply_promo_code) by calling them through the function-calling mechanism. NEVER type out tool calls as text. NEVER output JSON tool schemas in your replies.
 2. ALWAYS call search_menu FIRST before recommending, listing, or adding any item. Never guess or make up item names, IDs, or prices.
 3. When the customer asks to see items, search for them and then present the results in a friendly, readable format with emoji, name, short description, and price.
 4. Use add_to_cart with the EXACT item ID from search_menu results.
@@ -42,7 +42,8 @@ CRITICAL RULES — FOLLOW THESE EXACTLY:
 11. If the customer asks for "best", "top rated", "popular", or "highest rated" items — use search_menu with an empty query to get all items, then pick the highest-rated ones from the results.
 12. If the customer asks for "chef's special" or "chef's pick" — search for items and filter for ones with chef badges.
 13. Respond ONLY in natural language. Your replies must be conversational text that a customer would enjoy reading. Never include raw JSON, code, or technical output.
-14. LANGUAGE: Reply in the SAME language the customer used. If they wrote in Hindi (or Hinglish, Telugu, Tamil, etc.), respond in that language. Keep item names as they appear on the menu.`;
+14. LANGUAGE: ALWAYS reply in English, regardless of what language the customer uses. Keep item names as they appear on the menu.
+15. If the customer mentions or asks to apply a promo code (such as FLAT50, WELCOME10, BIRYANI20, NOQS10, etc.), use the apply_promo_code tool to apply it.`;
 
 function trimHistory(history) {
   const max = HISTORY_TURNS * 4;
@@ -65,7 +66,7 @@ function extractEmbeddedToolCall(text) {
       return { name: parsed.function.name, args: typeof a === 'string' ? JSON.parse(a) : a };
     }
   } catch { /* not JSON */ }
-  const jsonMatch = text.match(/\{[^{}]*"name"\s*:\s*"(search_menu|add_to_cart|remove_from_cart|view_cart|place_order|check_order_status)"[^{}]*\}/);
+  const jsonMatch = text.match(/\{[^{}]*"name"\s*:\s*"(search_menu|add_to_cart|remove_from_cart|view_cart|place_order|check_order_status|apply_promo_code)"[^{}]*\}/);
   if (jsonMatch) {
     try {
       const obj = JSON.parse(jsonMatch[0]);
@@ -80,7 +81,7 @@ function extractEmbeddedToolCall(text) {
 function containsToolCallJSON(text) {
   if (!text) return false;
   return /\{\s*"type"\s*:\s*"function"/.test(text) ||
-    /\{\s*"name"\s*:\s*"(search_menu|add_to_cart|remove_from_cart|view_cart|place_order|check_order_status)"/.test(text);
+    /\{\s*"name"\s*:\s*"(search_menu|add_to_cart|remove_from_cart|view_cart|place_order|check_order_status|apply_promo_code)"/.test(text);
 }
 
 async function handleMessage({ sessionKey, text, customerPhone, contactName } = {}) {
@@ -175,7 +176,7 @@ async function handleMessage({ sessionKey, text, customerPhone, contactName } = 
     }
 
     if (containsToolCallJSON(content)) {
-      const cleaned = content.replace(/\{[^{}]*"(type|name)"\s*:\s*"(function|search_menu|add_to_cart|remove_from_cart|view_cart|place_order|check_order_status)"[^{}]*\}/g, '').trim();
+      const cleaned = content.replace(/\{[^{}]*"(type|name)"\s*:\s*"(function|search_menu|add_to_cart|remove_from_cart|view_cart|place_order|check_order_status|apply_promo_code)"[^{}]*\}/g, '').trim();
       if (cleaned.length > 10) {
         finalReply = cleaned;
       } else {
